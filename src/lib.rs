@@ -27,11 +27,12 @@
 //! | typed (bf16/f16) | [`SgemmBi::forward`], `backward_dw`, `backward_dx` | bit-equal to f32 tier on upcast inputs |
 //! | tensor cores | [`SgemmBi::forward_tc`], `backward_dw_tc`, `backward_dx_tc` | own deterministic contract (mma.sync, f32 accumulate) |
 //!
-//! The tensor-core tier is typically 3–7× faster than the scalar tiers on
-//! 128x128-tile-friendly shapes and turns the determinism overhead
-//! negative against cuBLAS-PEDANTIC-class baselines; it does not
-//! bit-match the scalar tiers (a tensor-core reduction tree cannot
-//! reproduce a scalar FMA chain).
+//! The tensor-core tier is typically 3.5–6.3× faster than the scalar
+//! tiers (two bit-identical tile families, 128x128 and 64x64, routed by
+//! shape, covering both output dims >= 64) and turns the determinism
+//! overhead zero-to-negative against cuBLAS-PEDANTIC-class baselines;
+//! it does not bit-match the scalar tiers (a tensor-core reduction tree
+//! cannot reproduce a scalar FMA chain).
 //!
 //! ## Requirements
 //!

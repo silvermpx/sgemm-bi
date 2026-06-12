@@ -40,22 +40,37 @@ The f32 and typed tiers cover **every** shape: a bucketed dispatcher
 (Big / Slim / narrow / ultra-thin / GEMV / split-K/M/N with fixed-order
 tree reduction) handles the common cases natively and the typed tier
 falls back to "upcast → f32 kernel → downcast" — same bits by contract —
-for the rest. The tensor-core tier covers 128×128-tile shapes and returns
-`Error::Uncovered` otherwise.
+for the rest. The tensor-core tier covers both output dims ≥ 64 (two
+bit-identical kernel families, 128×128 and 64×64 tiles, routed by shape)
+and returns `Error::Uncovered` otherwise.
 
 ## Performance (RTX 6000 Ada, bf16)
 
-Tensor-core tier vs the scalar deterministic tier, GEMM level:
+Tensor-core tier vs the scalar deterministic tier, GEMM level
+(forward; measured on this crate's bench suite):
 
-| shape (M, K, N) | forward | dW | dX |
+| shape (M, K, N) | scalar | tensor cores | speedup |
 |---|---:|---:|---:|
-| 2048, 768, 3072 | 3.1× | 3.5× | 6.7× |
-| 4096, 1536, 3072 | 2.8× | 3.2× | 6.1× |
-| 2048, 768, 512 | 3.4× | 2.1× | 4.3× |
+| 2048, 768, 3072 | 290.9 µs | 83.4 µs | **3.5×** |
+| 4096, 1536, 3072 | 1123.0 µs | 353.5 µs | 3.2× |
+| 2048, 768, 512 | 123.5 µs | 19.5 µs | **6.3×** |
 
-~106 TFLOPS bf16 at M2048 K768 N3072. In an end-to-end mixed-precision
-training loop this turns the cost of determinism negative: ~0.8× of a
-cuBLAS-PEDANTIC-baseline step on d_model ≥ 768 models.
+~116 TFLOPS bf16 at M2048 K768 N3072 (~32 % of Ada dense peak). dW and
+dX see similar gains (4.0–5.6× and 3.5–5.1× on the same shapes).
+
+Against cuBLAS (measured in a host application using this engine for
+every training GEMM, same GPU, per optimizer step):
+
+| dtype × tier | vs cuBLAS | model size |
+|---|---|---|
+| f32 scalar vs TF32 | 1.28–1.53× | full f32 precision vs truncated-mantissa TF32 |
+| bf16/f16 scalar vs PEDANTIC | 1.09–1.37× | bit-contract, CUDA cores |
+| bf16 TC vs PEDANTIC | **1.04× (d128) → 0.70× (d1536)** | parity on small models, 16–30 % FASTER from d768 |
+| f16 TC vs PEDANTIC | 1.19× (d128) → 0.76× (d1536) | |
+
+The cost of determinism is zero-to-negative on transformer-class
+shapes; the deterministic bf16 step at d1536 also beats the f32-TF32
+baseline outright.
 
 ## Usage
 

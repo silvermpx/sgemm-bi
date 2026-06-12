@@ -328,7 +328,7 @@ fn require_typed(dtype: Option<Dtype>) -> Result<Dtype> {
     ))
 }
 
-/// Tensor-core forward (bf16/f16 only, `M >= 128 && N >= 128`, separate
+/// Tensor-core forward (bf16/f16 only, `M >= 64 && N >= 64`, separate
 /// numeric contract). Uncovered shapes return `SGB_ERR_UNCOVERED`.
 /// # Safety
 /// `eng` must be null or a live handle from [`sgb_engine_create`];
@@ -352,7 +352,7 @@ pub unsafe extern "C" fn sgb_forward_tc(eng: *const SgbEngine, gemm: *const SgbG
 }
 
 /// Tensor-core `dW += X^T @ dY` (f32 master accumulator; bf16/f16
-/// operands, `K >= 128 && N >= 128`).
+/// operands, `K >= 64 && N >= 64`).
 /// # Safety
 /// `eng` must be null or a live handle from [`sgb_engine_create`];
 /// `gemm` must be null or point to a valid descriptor whose device
@@ -373,7 +373,7 @@ pub unsafe extern "C" fn sgb_backward_dw_tc(eng: *const SgbEngine, gemm: *const 
     }
 }
 
-/// Tensor-core `dX = dY @ W^T` (bf16/f16, `M >= 128 && K >= 128`).
+/// Tensor-core `dX = dY @ W^T` (bf16/f16, `M >= 64 && K >= 64`).
 /// # Safety
 /// `eng` must be null or a live handle from [`sgb_engine_create`];
 /// `gemm` must be null or point to a valid descriptor whose device

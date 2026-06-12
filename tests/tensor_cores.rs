@@ -205,3 +205,118 @@ fn bench_tc_vs_scalar() {
         );
     }
 }
+
+/// The 64x64-tile family: correctness on shapes only it covers (an output
+/// dim in 64..128), bit-identity across runs, and honest gates. Launch
+/// reality is implied: no other path serves these shapes through the TC
+/// entry points, so Ok + a sane cosine means the tc64 kernel really ran
+/// (errors are never swallowed by this tier).
+#[test]
+fn tc_small_tile_correctness_determinism_and_gates() {
+    let h = Harness::new();
+    for dt in [Dtype::Bf16, Dtype::F16] {
+        for (m, k, n) in [
+            (64usize, 192usize, 64usize), // minimal gate corner
+            (96, 100, 320),               // K-tail + N tail inside tile
+            (1024, 256, 80),              // narrow output (projection-like)
+            (127, 384, 127),              // just under the 128 gate
+        ] {
+            let qx = quantize(&det(m * k, 11, 1.0), dt);
+            let qw = quantize(&det(k * n, 22, 0.5), dt);
+
+            let (_x32, x32p) = h.upload(&qx, Dtype::F32);
+            let (_w32, w32p) = h.upload(&qw, Dtype::F32);
+            let (y32, y32p) = h.zeros(m * n, Dtype::F32);
+            h.engine
+                .forward_f32(y32p, x32p, w32p, None, (m, k, n))
+                .unwrap();
+            let reference = h.download(&y32, m * n, Dtype::F32);
+
+            let (_xt, xtp) = h.upload(&qx, dt);
+            let (_wt, wtp) = h.upload(&qw, dt);
+            let run = || {
+                let (yt, ytp) = h.zeros(m * n, dt);
+                h.engine
+                    .forward_tc(
+                        TypedPtr::new(ytp, dt),
+                        TypedPtr::new(xtp, dt),
+                        TypedPtr::new(wtp, dt),
+                        None,
+                        (m, k, n),
+                    )
+                    .unwrap();
+                h.download(&yt, m * n, dt)
+            };
+            let y1 = run();
+            let y2 = run();
+            assert_bits(&format!("{dt:?} tc64 fwd M{m} K{k} N{n}"), &y1, &y2);
+            let cos = cos_sim(&y1, &reference);
+            assert!(cos > 0.99999, "{dt:?} tc64 M{m} K{k} N{n}: cos {cos}");
+        }
+
+        // Gates: one dim below 64 -> UNCOVERED, never a wrong answer.
+        let (_xt, xtp) = h.upload(&quantize(&det(63 * 64, 1, 1.0), dt), dt);
+        let (_wt, wtp) = h.upload(&quantize(&det(64 * 64, 2, 1.0), dt), dt);
+        let (_yt, ytp) = h.zeros(63 * 64, dt);
+        let err = h
+            .engine
+            .forward_tc(
+                TypedPtr::new(ytp, dt),
+                TypedPtr::new(xtp, dt),
+                TypedPtr::new(wtp, dt),
+                None,
+                (63, 64, 64),
+            )
+            .unwrap_err();
+        assert!(
+            matches!(err, sgemm_bi::Error::Uncovered { .. }),
+            "{dt:?}: expected Uncovered below the 64 gate, got {err}"
+        );
+    }
+}
+
+/// THE load-bearing property of the shape-routed tile pick: the 64- and
+/// 128-tile TC kernels are bit-identical per output element (same BK=64
+/// ascending slabs, same mma chain, same tail zero-fill). Exercised
+/// through the public API by comparing row 0 across batch sizes that
+/// route to DIFFERENT tiles: at N=512, M=2048 gives a 64-CTA 128-tile
+/// grid (under the underfill threshold -> Tile64) while M=4096 gives 128
+/// CTAs (-> Tile128). Strict all-M invariance across that boundary holds
+/// only if the two families produce identical bits.
+#[test]
+fn tc_cross_tile_strict_all_m_invariance() {
+    let h = Harness::new();
+    let (k, n) = (256usize, 512usize);
+    let big = 4096usize; // routes to Tile128
+    for dt in [Dtype::Bf16, Dtype::F16] {
+        let qx = quantize(&det(big * k, 66, 1.0), dt);
+        let qw = quantize(&det(k * n, 77, 0.5), dt);
+        let (_wt, wtp) = h.upload(&qw, dt);
+
+        let run = |m: usize| {
+            let (_xt, xtp) = h.upload(&qx[..m * k], dt);
+            let (yt, ytp) = h.zeros(m * n, dt);
+            h.engine
+                .forward_tc(
+                    TypedPtr::new(ytp, dt),
+                    TypedPtr::new(xtp, dt),
+                    TypedPtr::new(wtp, dt),
+                    None,
+                    (m, k, n),
+                )
+                .unwrap();
+            h.download(&yt, m * n, dt)
+        };
+
+        let y_big = run(big);
+        for m in [64usize, 96, 128, 1024, 2048] {
+            let y_m = run(m);
+            let rows = m.min(64);
+            assert_bits(
+                &format!("{dt:?} rows 0..{rows} at M={m} vs M={big}"),
+                &y_m[..rows * n],
+                &y_big[..rows * n],
+            );
+        }
+    }
+}

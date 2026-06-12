@@ -167,7 +167,8 @@ class Linear(torch.nn.Module):
       feeds the f32 accumulator directly).
     - ``tensor_cores=True`` opts into the tensor-core tier (bf16/f16,
       own deterministic numeric contract, strictly batch-invariant
-      forward, 3-7x faster on large shapes).
+      forward, 3.5-6.3x faster GEMMs than the scalar tier; covers
+      both output dims >= 64).
     - NOT ``torch.autocast``-aware: autocast casts activations while the
       stored weight keeps its dtype, which this layer rejects (dtype
       mismatch) instead of silently re-casting per step. Construct the

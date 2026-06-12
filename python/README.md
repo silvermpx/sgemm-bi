@@ -47,7 +47,7 @@ eng.forward(y.data_ptr(), x.data_ptr(), w.data_ptr(), None,
 | tier | guarantee |
 |---|---|
 | f32 / typed scalar | bit-identical across runs; bf16/f16 ≡ "upcast → f32 kernel → RNE downcast"; full shape coverage |
-| tensor cores (`tensor_cores=True`) | own deterministic contract (mma.sync, f32 accumulate); bit-identical across runs; forward strictly batch-invariant across all M; falls back to the scalar tier on non-128×128-tile shapes (shape-only dispatch — still deterministic) |
+| tensor cores (`tensor_cores=True`) | own deterministic contract (mma.sync, f32 accumulate); bit-identical across runs; forward strictly batch-invariant across all M; falls back to the scalar tier when an output dim is < 64 (shape-only dispatch — still deterministic; two bit-identical tile families, 128×128 and 64×64, cover everything above) |
 
 Bias gradient is a plain f32 column sum done in torch (deterministic
 run-to-run for a fixed shape; not part of the engine's batch-invariance

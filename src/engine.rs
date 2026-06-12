@@ -198,10 +198,11 @@ impl SgemmBi {
     // bit-match the scalar tiers — but runs are bit-identical to each
     // other, and the forward is strictly batch-invariant across ALL M
     // (each output element's K-reduction lives in one warp). Requires
-    // sm_80+. Shapes below the 128x128 tile gates return
+    // sm_80+. Two bit-identical tile families (128x128 and 64x64) are
+    // routed by shape. Shapes below the 64x64 tile gates return
     // [`Error::Uncovered`] — compose with the scalar tier as needed.
 
-    /// Tensor-core `Y = X @ W (+ bias)`. Covers `M >= 128 && N >= 128`.
+    /// Tensor-core `Y = X @ W (+ bias)`. Covers `M >= 64 && N >= 64`.
     pub fn forward_tc(
         &self,
         y: TypedPtr,
@@ -222,7 +223,7 @@ impl SgemmBi {
     }
 
     /// Tensor-core `dW += X^T @ dY` (f32 master accumulator). Covers
-    /// `K >= 128 && N >= 128`.
+    /// `K >= 64 && N >= 64`.
     pub fn backward_dw_tc(
         &self,
         dw: CUptr,
@@ -234,7 +235,7 @@ impl SgemmBi {
     }
 
     /// Tensor-core `dX = dY @ W^T` (typed RNE overwrite). Covers
-    /// `M >= 128 && K >= 128`.
+    /// `M >= 64 && K >= 64`.
     pub fn backward_dx_tc(
         &self,
         dx: TypedPtr,

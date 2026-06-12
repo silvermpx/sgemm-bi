@@ -4,9 +4,23 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] (0.1.1)
+## [0.1.1] - 2026-06-12
 
 ### Added
+
+- **Tensor-core small-tile family + BK=64 staging**: six
+  `sgemm_bi_*_tc64_*` kernels (64×64 tiles, 128 threads) extend the TC
+  tier to both output dims >= 64 and to GPU-underfilling grids; both
+  tile families stage 64-deep reduction slabs (half the barrier count)
+  with the 128-tile family on dynamic shared memory. The two families
+  are BIT-IDENTICAL per output element (same ascending mma chain), so
+  the shape-only routing never changes output bits and the strict
+  all-M forward invariance survives tile switching — asserted through
+  the public API by `tc_cross_tile_strict_all_m_invariance`. Measured
+  (RTX 6000 Ada, bf16): TC forward 3.5–6.3× over the scalar tier at
+  GEMM level, ~116 TFLOPS on M2048 K768 N3072; in a host training
+  loop, parity with cuBLAS-PEDANTIC on d128/d256 models and 16–30 %
+  faster from d768 up.
 
 - **PyTorch binding** (`python/`, PyPI package `sgemm-bi`, import
   `sgemm_bi`): PyO3 0.29 + maturin, abi3 wheel for Python >= 3.9. No
@@ -67,5 +81,5 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   MSRV 1.94, cargo-deny, cross-platform build matrix, and a manual
   tag-gated release pipeline.
 
-[Unreleased]: https://github.com/silvermpx/sgemm-bi/compare/v0.1.0...HEAD
+[0.1.1]: https://github.com/silvermpx/sgemm-bi/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/silvermpx/sgemm-bi/releases/tag/v0.1.0

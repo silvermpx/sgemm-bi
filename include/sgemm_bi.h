@@ -26,8 +26,8 @@
  *     round-to-nearest-even downcast". Full shape coverage.
  *   - tensor-core tier (sgb_*_tc): separate numeric contract (mma.sync,
  *     f32 accumulate). Runs bit-identical to each other; forward is
- *     strictly batch-invariant across all M. Covers 128x128-tile shapes
- *     only — compose with the scalar tier for the rest.
+ *     strictly batch-invariant across all M. Covers 64-tile shapes
+ *     (fwd M>=64 && N>=64) — compose with the scalar tier for the rest.
  */
 
 #ifndef SGEMM_BI_H
@@ -106,8 +106,8 @@ int32_t sgb_backward_dw(const SgbEngine *eng, const SgbGemm *gemm);
 int32_t sgb_backward_dx(const SgbEngine *eng, const SgbGemm *gemm);
 
 /* Tensor-core tier — bf16/f16 only; uncovered shapes return
- * SGB_ERR_UNCOVERED (gates: fwd M>=128 && N>=128, dW K>=128 && N>=128,
- * dX M>=128 && K>=128). */
+ * SGB_ERR_UNCOVERED (gates: fwd M>=64 && N>=64, dW K>=64 && N>=64,
+ * dX M>=64 && K>=64). */
 int32_t sgb_forward_tc(const SgbEngine *eng, const SgbGemm *gemm);
 int32_t sgb_backward_dw_tc(const SgbEngine *eng, const SgbGemm *gemm);
 int32_t sgb_backward_dx_tc(const SgbEngine *eng, const SgbGemm *gemm);

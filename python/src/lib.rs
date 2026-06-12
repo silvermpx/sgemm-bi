@@ -164,7 +164,7 @@ impl Engine {
     /// `out[M,N] = a[M,K] @ b[K,N] (+ bias[N], f32)`.
     ///
     /// `tensor_cores=True` tries the tensor-core tier first (bf16/f16,
-    /// 128x128-tile shapes) and falls back to the scalar tier — tier
+    /// 64-tile shapes: both output dims >= 64) and falls back to the scalar tier — tier
     /// choice depends only on shape and dtype, never on data, so
     /// determinism is preserved.
     #[pyo3(signature = (ptrs, dims, dtype, stream, tensor_cores=false))]

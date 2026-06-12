@@ -1707,12 +1707,79 @@ fn require_half(dt: WeightDtype, what: &str) -> Result<()> {
     Ok(())
 }
 
+/// Output-tile size of the TC tier. Two bit-identical kernel families:
+/// 128x128 / 256 threads (`sgemm_bi_*_tc_*`, dynamic smem at BK=64) and
+/// 64x64 / 128 threads (`sgemm_bi_*_tc64_*`, static smem). Both walk the
+/// reduction dim in ascending BK=64 slabs split into ascending m16n8k16
+/// steps with identical tail zero-fill, so every output element sees the
+/// exact same mma chain regardless of which tile the dispatcher picks —
+/// the shape-only routing below can never change output bits, and the
+/// strict all-M forward invariance survives tile switching
+/// (tests/tensor_cores.rs asserts the cross-tile property through the
+/// public API). Do NOT change slab order in one family without the other.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum TcTile {
+    Tile128,
+    Tile64,
+}
+
+/// Underfill threshold: when both output dims pass the 128 gate but the
+/// 128-tile grid has fewer CTAs than this, route to the 64x64 twins (4x
+/// the CTAs at the same total FLOPs; large GPUs sit mostly idle on
+/// small-model grids otherwise).
+const TC64_PREFER_MAX_TILES128: u32 = 72;
+
+fn tc_pick_tile(rows: usize, cols: usize) -> Option<TcTile> {
+    if rows >= 128 && cols >= 128 {
+        let tiles128 = (rows as u32).div_ceil(128) * (cols as u32).div_ceil(128);
+        if tiles128 >= TC64_PREFER_MAX_TILES128 {
+            return Some(TcTile::Tile128);
+        }
+        return Some(TcTile::Tile64);
+    }
+    if rows >= 64 && cols >= 64 {
+        return Some(TcTile::Tile64);
+    }
+    None
+}
+
+impl TcTile {
+    fn edge(self) -> u32 {
+        match self {
+            TcTile::Tile128 => 128,
+            TcTile::Tile64 => 64,
+        }
+    }
+
+    /// `dyn_bytes128`: the 128-tile kernel's dynamic-smem footprint (BK=64
+    /// staging exceeds the 48 KB static cap; per-op NN 71 680 / TN 69 632 /
+    /// NT 73 728 B, within the 75 776 B opt-in set at load). The 64-tile
+    /// family stays on static smem.
+    fn launch_cfg(
+        self,
+        rows: usize,
+        cols: usize,
+        dyn_bytes128: u32,
+    ) -> cudarc::driver::LaunchConfig {
+        let e = self.edge();
+        let total_tiles = (rows as u32).div_ceil(e) * (cols as u32).div_ceil(e);
+        cudarc::driver::LaunchConfig {
+            grid_dim: (total_tiles, 1, 1),
+            block_dim: (e * 2, 1, 1), // 256 threads at tile 128, 128 at tile 64
+            shared_mem_bytes: match self {
+                TcTile::Tile128 => dyn_bytes128,
+                TcTile::Tile64 => 0,
+            },
+        }
+    }
+}
+
 /// Tensor-core NN forward (TC tier):
 /// `Y = X @ W + bias` via mma.sync.m16n8k16 with f32 accumulation.
 /// SEPARATE numeric contract from the scalar triad (TC reduction tree, not
 /// the ascending-K FMA chain) — deterministic and batch-invariant across
 /// ALL M (each element's full K-reduction lives in one warp, independent of
-/// grid shape). Covers M >= 128 && N >= 128 && K >= 1; Err otherwise.
+/// grid shape). Covers M >= 64 && N >= 64 && K >= 1; Err otherwise.
 pub fn sgemm_bi_forward_tc(
     stream: &Arc<cudarc::driver::CudaStream>,
     kernels: &GpuKernels,
@@ -1727,27 +1794,26 @@ pub fn sgemm_bi_forward_tc(
     if x.dtype != y.dtype || w.dtype != y.dtype {
         return Err(Error::DtypeMismatch("sgemm_bi_forward_tc: mixed dtypes"));
     }
-    if !(batch >= 128 && n_out >= 128 && n_in >= 1) {
+    let Some(tile) = tc_pick_tile(batch, n_out) else {
         return Err(Error::Uncovered {
             op: "sgemm_bi_forward_tc",
             m: batch,
             k: n_in,
             n: n_out,
         });
-    }
+    };
     let dt = y.dtype;
     let alpha: f32 = 1.0;
     let beta: f32 = 0.0;
     let m_i = batch as i32;
     let n_i = n_out as i32;
     let k_i = n_in as i32;
-    let total_tiles = (batch as u32).div_ceil(128) * (n_out as u32).div_ceil(128);
-    let cfg = cudarc::driver::LaunchConfig {
-        grid_dim: (total_tiles, 1, 1),
-        block_dim: (256, 1, 1),
-        shared_mem_bytes: 0,
+    let cfg = tile.launch_cfg(batch, n_out, 71_680);
+    let func = match tile {
+        TcTile::Tile128 => kernels.sgemm_nn_tc_typed.get(dt),
+        TcTile::Tile64 => kernels.sgemm_nn_tc64_typed.get(dt),
     };
-    let mut b = stream.launch_builder(kernels.sgemm_nn_tc_typed.get(dt));
+    let mut b = stream.launch_builder(func);
     b.arg(&y.ptr);
     b.arg(&x.ptr);
     b.arg(&w.ptr);
@@ -1766,7 +1832,7 @@ pub fn sgemm_bi_forward_tc(
 
 /// Tensor-core TN dW (TC tier): `dW[K,N] += X^T @ dY` via mma.sync with f32
 /// accumulate straight into the f32 master gradient. Same TC contract as
-/// [`sgemm_bi_forward_tc`]. Covers K_out >= 128 && N >= 128.
+/// [`sgemm_bi_forward_tc`]. Covers K_out >= 64 && N >= 64.
 pub fn sgemm_bi_backward_dw_tc(
     stream: &Arc<cudarc::driver::CudaStream>,
     kernels: &GpuKernels,
@@ -1782,26 +1848,25 @@ pub fn sgemm_bi_backward_dw_tc(
             "sgemm_bi_backward_dw_tc: mixed dtypes",
         ));
     }
-    if !(n_in >= 128 && n_out >= 128 && batch >= 1) {
+    let Some(tile) = tc_pick_tile(n_in, n_out) else {
         return Err(Error::Uncovered {
             op: "sgemm_bi_backward_dw_tc",
             m: batch,
             k: n_in,
             n: n_out,
         });
-    }
+    };
     let dt = dy.dtype;
     let alpha: f32 = 1.0;
     let m_red_i = batch as i32;
     let k_out_i = n_in as i32;
     let n_i = n_out as i32;
-    let total_tiles = (n_in as u32).div_ceil(128) * (n_out as u32).div_ceil(128);
-    let cfg = cudarc::driver::LaunchConfig {
-        grid_dim: (total_tiles, 1, 1),
-        block_dim: (256, 1, 1),
-        shared_mem_bytes: 0,
+    let cfg = tile.launch_cfg(n_in, n_out, 69_632);
+    let func = match tile {
+        TcTile::Tile128 => kernels.sgemm_tn_tc_typed.get(dt),
+        TcTile::Tile64 => kernels.sgemm_tn_tc64_typed.get(dt),
     };
-    let mut b = stream.launch_builder(kernels.sgemm_tn_tc_typed.get(dt));
+    let mut b = stream.launch_builder(func);
     b.arg(&dw_ptr);
     b.arg(&x_saved.ptr);
     b.arg(&dy.ptr);
@@ -1815,7 +1880,7 @@ pub fn sgemm_bi_backward_dw_tc(
 
 /// Tensor-core NT dX (TC tier): `dX[M,K] = dY @ W^T` via mma.sync, typed RNE
 /// overwrite. Same TC contract as [`sgemm_bi_forward_tc`]. Covers
-/// M >= 128 && K_out >= 128.
+/// M >= 64 && K_out >= 64.
 pub fn sgemm_bi_backward_dx_tc(
     stream: &Arc<cudarc::driver::CudaStream>,
     kernels: &GpuKernels,
@@ -1831,26 +1896,25 @@ pub fn sgemm_bi_backward_dx_tc(
             "sgemm_bi_backward_dx_tc: mixed dtypes",
         ));
     }
-    if !(batch >= 128 && n_in >= 128 && n_out >= 1) {
+    let Some(tile) = tc_pick_tile(batch, n_in) else {
         return Err(Error::Uncovered {
             op: "sgemm_bi_backward_dx_tc",
             m: batch,
             k: n_in,
             n: n_out,
         });
-    }
+    };
     let dt = dx.dtype;
     let alpha: f32 = 1.0;
     let m_i = batch as i32;
     let n_i = n_out as i32;
     let k_out_i = n_in as i32;
-    let total_tiles = (batch as u32).div_ceil(128) * (n_in as u32).div_ceil(128);
-    let cfg = cudarc::driver::LaunchConfig {
-        grid_dim: (total_tiles, 1, 1),
-        block_dim: (256, 1, 1),
-        shared_mem_bytes: 0,
+    let cfg = tile.launch_cfg(batch, n_in, 73_728);
+    let func = match tile {
+        TcTile::Tile128 => kernels.sgemm_nt_tc_typed.get(dt),
+        TcTile::Tile64 => kernels.sgemm_nt_tc64_typed.get(dt),
     };
-    let mut b = stream.launch_builder(kernels.sgemm_nt_tc_typed.get(dt));
+    let mut b = stream.launch_builder(func);
     b.arg(&dx.ptr);
     b.arg(&dy.ptr);
     b.arg(&w.ptr);

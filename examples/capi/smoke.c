@@ -142,7 +142,7 @@ int main(void) {
   /* Error paths must report, not crash: TC on an undersized shape, and
    * an invalid dtype code. */
   SgbGemm small = gt;
-  small.m = 64; /* below the 128-row TC gate */
+  small.m = 32; /* below the 64-row TC gate */
   if (sgb_forward_tc(eng, &small) != SGB_ERR_UNCOVERED) {
     fprintf(stderr, "FAIL: expected SGB_ERR_UNCOVERED from TC gate\n");
     return 1;
