@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1.post2] - 2026-06-12 (PyPI only)
+
+### Fixed
+
+- **IDE resolution of the public API** (PyCharm: "Cannot find reference
+  'Linear' in 'sgemm_bi'"): in a `py.typed` package, type checkers per
+  PEP 484 do not treat plain `from .torch import Linear` as a public
+  re-export. `__init__.py` now uses the canonical `import X as X`
+  re-export form for `Engine`, `Linear`, and `deterministic_linear`.
+  No runtime change.
+
 ## [0.1.1.post1] - 2026-06-12 (PyPI only)
 
 Python packaging fix, released as the `py-v0.1.1.post1` tag — PyPI
@@ -103,6 +114,7 @@ the Rust crate stays at 0.1.1, no crates.io release.
   MSRV 1.94, cargo-deny, cross-platform build matrix, and a manual
   tag-gated release pipeline.
 
+[0.1.1.post2]: https://github.com/silvermpx/sgemm-bi/compare/py-v0.1.1.post1...py-v0.1.1.post2
 [0.1.1.post1]: https://github.com/silvermpx/sgemm-bi/compare/v0.1.1...py-v0.1.1.post1
 [0.1.1]: https://github.com/silvermpx/sgemm-bi/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/silvermpx/sgemm-bi/releases/tag/v0.1.0

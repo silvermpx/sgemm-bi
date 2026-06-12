@@ -28,8 +28,12 @@ if _platform.system() != "Linux":  # pragma: no cover
         "cannot work here by design."
     )
 
-from ._sgemm_bi import Engine
-from .torch import Linear, deterministic_linear
+# PEP 484 re-export form ("import X as X"): in a py.typed package a plain
+# `from .torch import Linear` is treated as a private import by type
+# checkers/IDEs - PyCharm then reports "Cannot find reference 'Linear'".
+from ._sgemm_bi import Engine as Engine
+from .torch import Linear as Linear
+from .torch import deterministic_linear as deterministic_linear
 
 __all__ = ["Engine", "Linear", "deterministic_linear"]
-__version__ = "0.1.1.post1"
+__version__ = "0.1.1.post2"
