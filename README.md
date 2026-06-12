@@ -72,6 +72,20 @@ The cost of determinism is zero-to-negative on transformer-class
 shapes; the deterministic bf16 step at d1536 also beats the f32-TF32
 baseline outright.
 
+## Documentation and examples
+
+- [Usage guide](docs/usage-guide.md) — recipes for all three interfaces,
+  tier selection, CUDA Graph capture, determinism self-checks.
+- [`examples/deterministic_training.rs`](examples/deterministic_training.rs) —
+  full Rust triad with runtime determinism/invariance asserts
+  (`cargo run --release --example deterministic_training`).
+- [`examples/capi/smoke.c`](examples/capi/smoke.c) — the C ABI end to end.
+- [`python/examples/train_deterministic.py`](python/examples/train_deterministic.py) —
+  bit-identical PyTorch training, twice from one seed.
+- API reference: [docs.rs/sgemm-bi](https://docs.rs/sgemm-bi); the Python
+  package ships typed stubs (`.pyi` + `py.typed`), so IDE hover/completion
+  documents the native `Engine` too.
+
 ## Usage
 
 ```rust,ignore

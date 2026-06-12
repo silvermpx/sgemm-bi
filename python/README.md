@@ -53,6 +53,13 @@ Bias gradient is a plain f32 column sum done in torch (deterministic
 run-to-run for a fixed shape; not part of the engine's batch-invariance
 contract).
 
+## Examples
+
+[`examples/train_deterministic.py`](examples/train_deterministic.py)
+trains twice from one seed and asserts bit-identical weights, then
+checks batch invariance. Typed stubs ship in the wheel (`py.typed`) —
+IDEs autocomplete and document the native `Engine` class.
+
 ## Tests
 
 ```sh
