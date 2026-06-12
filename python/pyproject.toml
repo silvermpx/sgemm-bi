@@ -4,8 +4,8 @@ build-backend = "maturin"
 
 [project]
 name = "sgemm-bi"
-version = "0.1.1"
-description = "Deterministic, batch-invariant CUDA GEMM for PyTorch: bit-identical training matmuls (forward / dW / dX) in f32, bf16, f16, with an opt-in tensor-core tier."
+version = "0.1.1.post1"
+description = "Deterministic, batch-invariant CUDA GEMM for PyTorch: bit-identical training matmuls (forward / dW / dX) in f32, bf16, f16, with an opt-in tensor-core tier. Requires Linux x86_64 + NVIDIA Ampere or newer."
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 authors = [{ name = "silvermpx" }]
@@ -16,6 +16,7 @@ classifiers = [
     "Programming Language :: Rust",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Environment :: GPU :: NVIDIA CUDA",
+    "Operating System :: POSIX :: Linux",
 ]
 
 [project.urls]

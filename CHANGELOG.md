@@ -4,6 +4,28 @@ All notable changes to this project are documented here. The format is
 based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1.post1] - 2026-06-12 (PyPI only)
+
+Python packaging fix, released as the `py-v0.1.1.post1` tag — PyPI
+only (PEP 440 post-release: packaging/metadata fix, zero code change);
+the Rust crate stays at 0.1.1, no crates.io release.
+
+### Fixed
+
+- **`pip install sgemm-bi` on unsupported platforms**: pip fell back to
+  the sdist (only a manylinux x86_64 wheel exists) and died inside
+  cudarc's build script looking for `nvcc` — 42 lines of maturin panic
+  instead of an answer. Now: (a) the binding's cudarc bindings are
+  pinned (`cuda-12060`), so source builds need NO CUDA toolkit — this
+  also makes the sdist actually buildable on Linux aarch64 (GH200-class
+  hosts) where no wheel ships yet; (b) importing on a non-Linux OS
+  raises a clear ImportError ("requires Linux x86_64 with an NVIDIA
+  GPU... cannot work here by design"); (c) PyPI metadata now carries
+  the `Operating System :: POSIX :: Linux` classifier and a loud
+  requirement line in the description. Runtime behavior on supported
+  platforms is unchanged (dynamic loading resolves the real driver;
+  validated on CUDA 13.2).
+
 ## [0.1.1] - 2026-06-12
 
 ### Added
@@ -81,5 +103,6 @@ this project adheres to [Semantic Versioning](https://semver.org/).
   MSRV 1.94, cargo-deny, cross-platform build matrix, and a manual
   tag-gated release pipeline.
 
+[0.1.1.post1]: https://github.com/silvermpx/sgemm-bi/compare/v0.1.1...py-v0.1.1.post1
 [0.1.1]: https://github.com/silvermpx/sgemm-bi/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/silvermpx/sgemm-bi/releases/tag/v0.1.0

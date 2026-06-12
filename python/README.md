@@ -10,7 +10,7 @@ engine. No libtorch linkage — tensors cross as raw device pointers, so
 one wheel works with any PyTorch build. Kernels compile once at engine
 creation via NVRTC; the runtime needs only the NVIDIA driver.
 
-**Requirements**: NVIDIA Ampere or newer (sm_80+), PyTorch with CUDA.
+**Requirements**: Linux x86_64, NVIDIA Ampere or newer (sm_80+), PyTorch with CUDA. (No macOS/Windows — there is no CUDA there; the package refuses to import with a clear message.)
 
 ## Install
 

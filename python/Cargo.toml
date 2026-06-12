@@ -21,11 +21,15 @@ crate-type = ["cdylib"]
 
 [dependencies]
 sgemm-bi = { path = ".." }
+# Bindings pinned to CUDA 12.6: source builds (pip sdist) need NO CUDA
+# toolkit on the build machine. dynamic-loading resolves the real driver
+# at run time; the driver API is backward-compatible, so 12.6 bindings
+# run fine on newer drivers (we validate on CUDA 13.2).
 cudarc = { version = "0.19.7", default-features = false, features = [
     "driver",
     "nvrtc",
     "dynamic-loading",
-    "cuda-version-from-build-system",
+    "cuda-12060",
 ] }
 pyo3 = { version = "0.29", features = ["abi3-py39", "extension-module"] }
 

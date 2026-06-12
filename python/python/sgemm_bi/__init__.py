@@ -18,8 +18,18 @@ Quick start::
 Requirements: NVIDIA Ampere or newer (sm_80+).
 """
 
+import platform as _platform
+
+if _platform.system() != "Linux":  # pragma: no cover
+    raise ImportError(
+        "sgemm-bi requires Linux x86_64 with an NVIDIA GPU (Ampere or "
+        f"newer); this platform is {_platform.system()}/{_platform.machine()}. "
+        "There is no CUDA on macOS or non-NVIDIA hardware, so the package "
+        "cannot work here by design."
+    )
+
 from ._sgemm_bi import Engine
 from .torch import Linear, deterministic_linear
 
 __all__ = ["Engine", "Linear", "deterministic_linear"]
-__version__ = "0.1.1"
+__version__ = "0.1.1.post1"
