@@ -21,6 +21,11 @@ pub enum Error {
     },
     /// Operand dtypes disagree where the kernel requires them equal.
     DtypeMismatch(&'static str),
+    /// Device compute capability below the supported minimum. The kernel
+    /// blob uses `cp.async` and native bf16 throughout, so the whole
+    /// engine requires Ampere or newer (sm_80+); this is checked once at
+    /// construction instead of surfacing as an opaque NVRTC failure.
+    UnsupportedArch { major: u32, minor: u32 },
 }
 
 impl fmt::Display for Error {
@@ -32,6 +37,11 @@ impl fmt::Display for Error {
                 "{op}: no deterministic bucket for shape M={m} K={k} N={n} in this tier"
             ),
             Error::DtypeMismatch(what) => write!(f, "dtype mismatch: {what}"),
+            Error::UnsupportedArch { major, minor } => write!(
+                f,
+                "unsupported GPU architecture sm_{major}{minor}: sgemm-bi requires \
+                 Ampere or newer (sm_80+)"
+            ),
         }
     }
 }

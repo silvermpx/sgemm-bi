@@ -1,6 +1,6 @@
 [package]
 name = "sgemm-bi"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.94"
 authors = ["silvermpx"]
@@ -12,6 +12,15 @@ repository = "https://github.com/silvermpx/sgemm-bi"
 readme = "README.md"
 keywords = ["cuda", "gemm", "deterministic", "deep-learning", "reproducibility"]
 categories = ["science", "mathematics"]
+
+[lib]
+# cdylib/staticlib carry the C ABI (`capi` feature); rlib is the normal
+# Rust dependency form.
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[features]
+# Flat extern "C" interface (src/capi.rs + include/sgemm_bi.h).
+capi = []
 
 [dependencies.cudarc]
 version = "0.19.7"

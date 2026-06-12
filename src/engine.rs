@@ -31,8 +31,10 @@ pub struct SgemmBi {
 
 impl SgemmBi {
     /// Build an engine on `stream`. Compiles kernels for the device's
-    /// native architecture (`sm_80`+ required for the bf16/f16 and
-    /// tensor-core tiers).
+    /// native architecture. Requires Ampere or newer (sm_80+): the kernel
+    /// blob uses `cp.async` staging and native bf16 in every tier, so
+    /// older devices fail here with [`Error::UnsupportedArch`] rather
+    /// than an opaque NVRTC error.
     pub fn new(context: &Arc<CudaContext>, stream: Arc<CudaStream>) -> Result<Self> {
         let cc = (
             context
@@ -42,6 +44,12 @@ impl SgemmBi {
                 .attribute(cudarc::driver::sys::CUdevice_attribute_enum::CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR)
                 .map_err(|e| Error::Cuda(format!("query CC minor: {e:?}")))? as u32,
         );
+        if cc.0 < 8 {
+            return Err(Error::UnsupportedArch {
+                major: cc.0,
+                minor: cc.1,
+            });
+        }
         let arch = crate::kernels::nvrtc_arch(cc);
         let kernels = Kernels::compile(context, &stream, arch)?;
         Ok(Self {

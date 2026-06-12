@@ -35,10 +35,18 @@
 //!
 //! ## Requirements
 //!
-//! NVIDIA GPU, `sm_80`+ for the typed and tensor-core tiers (cp.async,
-//! ldmatrix, bf16 mma). Kernels compile at engine construction via NVRTC
-//! for the device's native architecture — no CUDA toolkit needed at run
-//! time beyond the driver and NVRTC.
+//! NVIDIA Ampere or newer (`sm_80`+) — the kernel blob uses cp.async,
+//! ldmatrix, and native bf16 throughout, so [`SgemmBi::new`] rejects
+//! older devices with [`Error::UnsupportedArch`]. Kernels compile at
+//! engine construction via NVRTC for the device's native architecture —
+//! no CUDA toolkit needed at run time beyond the driver and NVRTC.
+//!
+//! ## C interface
+//!
+//! Enable the `capi` feature for a flat `extern "C"` surface (module
+//! [`capi`], header `include/sgemm_bi.h`): engine create/destroy, the
+//! six GEMM entry points on raw `CUdeviceptr`s, per-thread error
+//! strings, and scratch pre-sizing for CUDA Graph capture.
 //!
 //! ## Example
 //!
@@ -68,6 +76,8 @@
 //! stream.synchronize().unwrap();
 //! ```
 
+#[cfg(feature = "capi")]
+pub mod capi;
 mod dispatch;
 mod dtype;
 mod engine;

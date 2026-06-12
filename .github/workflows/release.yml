@@ -24,8 +24,8 @@ jobs:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --no-run
+      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - run: cargo test --no-run --all-features
       - run: cargo test --doc
       - uses: EmbarkStudios/cargo-deny-action@v2
 
