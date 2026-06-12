@@ -4,16 +4,36 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "0 3 * * *"
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
 env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+  RUST_BACKTRACE: 1
   # Bindings version for compile-only CI (no CUDA toolkit on runners);
-  # the engine itself resolves the real version at run time.
+  # the engine resolves the real driver/NVRTC version at run time.
   CUDARC_CUDA_VERSION: "12060"
 
 jobs:
+  lockfile:
+    name: Cargo.lock up to date
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo check --locked
+
   fmt:
     name: Rustfmt
     runs-on: ubuntu-latest
@@ -23,12 +43,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - run: cargo fmt --check
+      - run: cargo fmt --all -- --check
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -40,28 +60,80 @@ jobs:
   docs:
     name: Documentation
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      RUSTDOCFLAGS: -Dwarnings
     steps:
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
       - run: cargo doc --no-deps
-        env:
-          RUSTDOCFLAGS: -D warnings
 
-  check:
-    name: Check (stable + MSRV)
+  msrv:
+    name: MSRV (1.94)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94"
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets
+
+  deny:
+    name: Security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  basics:
+    name: Gate
+    runs-on: ubuntu-latest
+    needs: [lockfile, fmt, clippy, docs, msrv, deny]
+    steps:
+      - run: exit 0
+
+  # GPU contract tests run out-of-band on real hardware. CI builds the
+  # test binaries on every platform (full type-check + link) and compiles
+  # the no_run doctests, but executes nothing CUDA-dependent.
+  build-tests:
+    name: Build tests (${{ matrix.os }} / ${{ matrix.rust }})
+    needs: basics
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
-        rust: [stable, "1.94"]
+        include:
+          - os: ubuntu-latest
+            rust: stable
+          - os: ubuntu-latest
+            rust: nightly
+          - os: macos-latest
+            rust: stable
+          - os: windows-latest
+            rust: stable
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --all-targets
+        with:
+          key: ${{ matrix.rust }}
+      - run: cargo test --no-run
+      - run: cargo test --doc
 
-  # GPU contract tests run out-of-band on real hardware; CI is compile-only.
+  publish-check:
+    name: Publish dry-run
+    needs: [basics, build-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish --dry-run

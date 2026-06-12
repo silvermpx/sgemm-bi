@@ -1,0 +1,63 @@
+name: Release
+
+# Releases are MANUAL: push a vX.Y.Z tag only after CI is green on main.
+# Nothing publishes automatically from branch pushes.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions: {}
+
+env:
+  CUDARC_CUDA_VERSION: "12060"
+
+jobs:
+  ci-check:
+    name: Verify CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94"
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --no-run
+      - run: cargo test --doc
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  publish:
+    name: Publish to crates.io
+    runs-on: ubuntu-latest
+    needs: ci-check
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.94"
+
+      - name: Verify tag matches Cargo.toml
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          CARGO_VERSION="v$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[0].version')"
+          if [ "$CARGO_VERSION" != "$TAG" ]; then
+            echo "Tag $TAG does not match Cargo.toml version $CARGO_VERSION"
+            exit 1
+          fi
+
+      - name: Publish
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --generate-notes --title "$TAG"
