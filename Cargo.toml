@@ -1,0 +1,22 @@
+[package]
+name = "sgemm-bi"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.94"
+authors = ["silvermpx"]
+description = "Deterministic, batch-invariant CUDA GEMM engine with a full training triad (forward, dW, dX) in f32 / bf16 / f16, plus an opt-in tensor-core tier that is faster than cuBLAS PEDANTIC. Bit-identical results across runs; fixed reduction order; no atomics; no cuBLAS dependency."
+homepage = "https://github.com/silvermpx/sgemm-bi"
+documentation = "https://docs.rs/sgemm-bi"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/silvermpx/sgemm-bi"
+readme = "README.md"
+keywords = ["cuda", "gemm", "deterministic", "deep-learning", "reproducibility"]
+categories = ["science", "mathematics"]
+
+[dependencies.cudarc]
+version = "0.19.7"
+default-features = false
+features = ["driver", "nvrtc", "dynamic-loading", "cuda-version-from-build-system"]
+
+[dev-dependencies]
+half = "2"
