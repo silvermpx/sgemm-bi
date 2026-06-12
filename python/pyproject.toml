@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.14,<2"]
+build-backend = "maturin"
+
+[project]
+name = "sgemm-bi"
+version = "0.1.1"
+description = "Deterministic, batch-invariant CUDA GEMM for PyTorch: bit-identical training matmuls (forward / dW / dX) in f32, bf16, f16, with an opt-in tensor-core tier."
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+authors = [{ name = "silvermpx" }]
+requires-python = ">=3.9"
+keywords = ["cuda", "gemm", "deterministic", "pytorch", "reproducibility"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+
+[project.urls]
+Repository = "https://github.com/silvermpx/sgemm-bi"
+Changelog = "https://github.com/silvermpx/sgemm-bi/blob/main/CHANGELOG.md"
+
+[tool.maturin]
+python-source = "python"
+module-name = "sgemm_bi._sgemm_bi"
+features = ["pyo3/extension-module"]

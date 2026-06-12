@@ -1,0 +1,32 @@
+# PyTorch binding for sgemm-bi. Built with maturin into the `sgemm-bi`
+# Python package (import name `sgemm_bi`). Deliberately does NOT link
+# libtorch: tensors cross as raw device pointers, so one wheel works
+# with any PyTorch build; the runtime needs only the CUDA driver and
+# NVRTC (both ship with the driver / torch itself).
+
+[package]
+name = "sgemm-bi-python"
+version = "0.1.1"
+edition = "2024"
+rust-version = "1.94"
+authors = ["silvermpx"]
+description = "PyTorch binding for the sgemm-bi deterministic GEMM engine"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/silvermpx/sgemm-bi"
+publish = false
+
+[lib]
+name = "_sgemm_bi"
+crate-type = ["cdylib"]
+
+[dependencies]
+sgemm-bi = { path = ".." }
+cudarc = { version = "0.19.7", default-features = false, features = [
+    "driver",
+    "nvrtc",
+    "dynamic-loading",
+    "cuda-version-from-build-system",
+] }
+pyo3 = { version = "0.29", features = ["abi3-py39", "extension-module"] }
+
+[workspace]

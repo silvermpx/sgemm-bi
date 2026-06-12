@@ -8,6 +8,26 @@ this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **PyTorch binding** (`python/`, PyPI package `sgemm-bi`, import
+  `sgemm_bi`): PyO3 0.29 + maturin, abi3 wheel for Python >= 3.9. No
+  libtorch linkage — tensors cross as raw device pointers, so one wheel
+  works with any PyTorch build; runtime needs only the NVIDIA driver.
+  Ships `sgemm_bi.Linear` (deterministic `nn.Linear` replacement with
+  GEMM-natural `[in, out]` weight layout and `from_torch` converter),
+  the functional `deterministic_linear` autograd op (dW accumulated in
+  f32 inside the kernel, one rounding to the parameter dtype), and the
+  low-level `Engine`. Engine work is ordered against torch's current
+  stream with a CUDA-event bridge (no host syncs); calls release the
+  GIL; forward/backward are safe across torch's autograd thread.
+  Desk-reviewed against PyTorch/PyO3/maturin/CUDA driver documentation;
+  GPU test suite (`python/tests/`) green on RTX 6000 Ada: parity vs
+  float64 references, bit-identity across runs in all three dtypes,
+  strict all-M batch invariance of the tensor-core forward, end-to-end
+  training.
+- **CI/release for the binding**: `python-binding` job (fmt, clippy,
+  wheel build artifact) and a tag-gated `publish-pypi` job using PyPI
+  trusted publishing (OIDC, no token secret).
+
 - **C ABI** behind the `capi` feature (`src/capi.rs`, header
   `include/sgemm_bi.h`, `cdylib`/`staticlib` crate types): engine
   create/destroy/synchronize on a device ordinal, one `SgbGemm`

@@ -10,6 +10,7 @@ documentation = "https://docs.rs/sgemm-bi"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/silvermpx/sgemm-bi"
 readme = "README.md"
+exclude = ["python/", ".github/"]
 keywords = ["cuda", "gemm", "deterministic", "deep-learning", "reproducibility"]
 categories = ["science", "mathematics"]
 

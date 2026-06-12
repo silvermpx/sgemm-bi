@@ -127,6 +127,33 @@ jobs:
       - run: cargo test --no-run --all-features
       - run: cargo test --doc
 
+  python-binding:
+    name: Python binding (build + lint)
+    needs: basics
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: python
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: cargo fmt --manifest-path python/Cargo.toml --all -- --check
+      - run: cargo clippy --manifest-path python/Cargo.toml --all-targets -- -D warnings
+      - name: Build wheel
+        run: |
+          pip install "maturin>=1.14,<2"
+          cd python && maturin build --release
+      - uses: actions/upload-artifact@v6
+        with:
+          name: wheel
+          path: python/target/wheels/*.whl
+
   publish-check:
     name: Publish dry-run
     needs: [basics, build-tests]
